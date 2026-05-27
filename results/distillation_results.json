@@ -1,0 +1,17 @@
+{
+  "teacher": {
+    "model": "bert-base-uncased",
+    "size_mb": 0,
+    "f1": 0.0,
+    "inference_ms_per_batch": 0.0
+  },
+  "student": {
+    "model": "distilbert-base-uncased",
+    "size_mb": 0,
+    "f1": 0.0,
+    "inference_ms_per_batch": 0.0
+  },
+  "compression_ratio": 0.0,
+  "speedup": 0.0,
+  "f1_retention_pct": 0.0
+}

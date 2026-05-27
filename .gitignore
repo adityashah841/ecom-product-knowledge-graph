@@ -1,0 +1,12 @@
+data/raw/
+data/processed/
+models/*.pt
+models/*.bin
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+dist/
+.DS_Store
+wandb/
+lightning_logs/

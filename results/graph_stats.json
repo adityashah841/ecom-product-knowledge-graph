@@ -1,0 +1,9 @@
+{
+  "total_nodes": 0,
+  "total_edges": 0,
+  "nodes_by_type": {},
+  "edges_by_type": {},
+  "average_degree": 0.0,
+  "num_weakly_connected_components": 0,
+  "top_10_brands_by_degree": []
+}
