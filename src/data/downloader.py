@@ -1,7 +1,13 @@
 """
-Data downloader for the Amazon ESCI dataset.
-Downloads, samples, silver-labels, and splits product data for NER training.
-Rule-based silver labels use structured fields (brand, category) and curated dictionaries.
+Data downloader for the E-Commerce Product Knowledge Graph pipeline.
+
+Primary strategy: generate a large synthetic product catalogue with realistic
+Amazon-style titles and perfect BIO labels. Each title is assembled from
+real brand names, categories, colors, materials and attributes using randomized
+templates, giving us perfectly aligned NER training data without any external
+dataset dependency.
+
+Fallback: try HuggingFace datasets that are pure-Parquet (no custom scripts).
 """
 
 import os
@@ -13,239 +19,237 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import yaml
-from datasets import load_dataset
 from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Curated color vocabulary (200 entries)
+# ── Vocabulary ────────────────────────────────────────────────────────────────
+
+BRANDS = [
+    "Nike", "Adidas", "Puma", "Under Armour", "Reebok", "New Balance",
+    "Asics", "Saucony", "Brooks", "Hoka", "Salomon", "Merrell",
+    "Apple", "Samsung", "Sony", "LG", "Bose", "JBL", "Beats", "Sennheiser",
+    "Logitech", "Razer", "Corsair", "SteelSeries", "HyperX", "Anker",
+    "Levi's", "H&M", "Zara", "Gap", "Tommy Hilfiger", "Ralph Lauren",
+    "Calvin Klein", "Guess", "Wrangler", "Lee", "Dickies", "Carhartt",
+    "Columbia", "The North Face", "Patagonia", "Arc'teryx", "Marmot",
+    "Timberland", "Caterpillar", "Dr. Martens", "Clarks", "Skechers",
+    "Crocs", "Birkenstock", "Vans", "Converse", "Fila",
+    "Amazon Basics", "AmazonBasics", "Basics by Amazon",
+    "KitchenAid", "Cuisinart", "Instant Pot", "Ninja", "Vitamix",
+    "Braun", "Philips", "Dyson", "iRobot", "Shark", "Bissell",
+    "IKEA", "Wayfair", "Ashley", "Serta", "Tempur-Pedic", "Casper",
+    "Fossil", "Casio", "Seiko", "Citizen", "Timex", "Bulova",
+    "L'Oreal", "Neutrogena", "Cetaphil", "Aveeno", "Dove", "Olay",
+    "Colgate", "Oral-B", "Crest", "Gillette", "Schick", "BIC",
+    "Trek", "Giant", "Specialized", "Schwinn", "Diamondback",
+    "Wilson", "Titleist", "Callaway", "TaylorMade", "Ping", "Cobra",
+    "Rawlings", "Easton", "Louisville Slugger", "Mizuno", "Majestic",
+    "Dewalt", "Milwaukee", "Makita", "Bosch", "Ryobi", "Black+Decker",
+    "Craftsman", "Stanley", "Irwin", "Klein Tools",
+    "3M", "Scotch", "Avery", "Brother", "Epson", "HP",
+    "Lego", "Mattel", "Hasbro", "Fisher-Price", "VTech", "Leapfrog",
+    "Rubbermaid", "Tupperware", "Pyrex", "OXO", "Lodge", "Le Creuset",
+    "Champion", "Hanes", "Fruit of the Loom", "Gildan", "Bella+Canvas",
+    "Pacsafe", "Osprey", "Deuter", "Gregory", "Kelty", "REI Co-op",
+    "Hydro Flask", "Nalgene", "CamelBak", "Yeti", "RTIC", "Stanley",
+    "Ziploc", "Glad", "Hefty", "Reynolds", "Saran", "Clorox",
+    "Tide", "Downy", "Bounce", "Gain", "Persil", "ALL",
+    "Energizer", "Duracell", "Rayovac", "Amazon Rechargeable",
+    "WD-40", "Rust-Oleum", "Krylon", "Sherwin-Williams",
+]
+
+CATEGORIES = {
+    "Running Shoes": ["Road Running Shoes", "Trail Running Shoes", "Racing Flats", "Cross Training Shoes"],
+    "Sneakers": ["Casual Sneakers", "High-Top Sneakers", "Low-Top Sneakers", "Platform Sneakers"],
+    "Boots": ["Ankle Boots", "Chelsea Boots", "Hiking Boots", "Work Boots", "Winter Boots"],
+    "T-Shirt": ["Graphic T-Shirt", "Plain T-Shirt", "Performance T-Shirt", "Polo Shirt", "Long Sleeve Shirt"],
+    "Jeans": ["Slim Fit Jeans", "Straight Leg Jeans", "Skinny Jeans", "Bootcut Jeans", "Relaxed Fit Jeans"],
+    "Jacket": ["Rain Jacket", "Windbreaker", "Fleece Jacket", "Down Jacket", "Softshell Jacket"],
+    "Hoodie": ["Pullover Hoodie", "Zip-Up Hoodie", "Oversized Hoodie", "Tech Fleece Hoodie"],
+    "Shorts": ["Athletic Shorts", "Cargo Shorts", "Board Shorts", "Running Shorts", "Compression Shorts"],
+    "Leggings": ["Yoga Pants", "Compression Leggings", "Running Tights", "Thermal Leggings"],
+    "Dress": ["Casual Dress", "Summer Dress", "Midi Dress", "Maxi Dress", "Mini Dress"],
+    "Laptop": ["Gaming Laptop", "Ultrabook", "Business Laptop", "Chromebook", "2-in-1 Laptop"],
+    "Headphones": ["Over-Ear Headphones", "On-Ear Headphones", "In-Ear Headphones", "Wireless Headphones", "Noise Cancelling Headphones"],
+    "Earbuds": ["True Wireless Earbuds", "Sports Earbuds", "In-Ear Monitors", "Bluetooth Earbuds"],
+    "Backpack": ["School Backpack", "Hiking Backpack", "Travel Backpack", "Laptop Backpack", "Drawstring Bag"],
+    "Watch": ["Sports Watch", "Smartwatch", "Analog Watch", "Digital Watch", "Dive Watch"],
+    "Water Bottle": ["Insulated Water Bottle", "Sport Water Bottle", "Wide Mouth Bottle", "Squeeze Bottle"],
+    "Yoga Mat": ["Exercise Mat", "Fitness Mat", "Anti-Slip Mat", "Thick Yoga Mat"],
+    "Coffee Maker": ["Drip Coffee Maker", "Single Serve Coffee Maker", "Espresso Machine", "French Press", "Pour Over"],
+    "Blender": ["High Speed Blender", "Personal Blender", "Immersion Blender", "Countertop Blender"],
+    "Phone Case": ["Protective Case", "Slim Case", "Wallet Case", "Clear Case", "Rugged Case"],
+    "Sunglasses": ["Polarized Sunglasses", "Sports Sunglasses", "Aviator Sunglasses", "Wayfarer Sunglasses"],
+    "Hat": ["Baseball Cap", "Snapback Hat", "Beanie", "Bucket Hat", "Sun Hat", "Trucker Hat"],
+    "Socks": ["Athletic Socks", "Compression Socks", "No-Show Socks", "Crew Socks", "Wool Socks"],
+    "Gloves": ["Winter Gloves", "Work Gloves", "Touchscreen Gloves", "Running Gloves", "Cycling Gloves"],
+    "Belt": ["Leather Belt", "Canvas Belt", "Tactical Belt", "Reversible Belt"],
+    "Wallet": ["Bifold Wallet", "Trifold Wallet", "Slim Wallet", "Money Clip", "Card Holder"],
+    "Dumbbell": ["Hex Dumbbell", "Adjustable Dumbbell", "Rubber Dumbbell", "Neoprene Dumbbell"],
+    "Resistance Band": ["Loop Band", "Pull Up Band", "Tube Band", "Flat Band"],
+    "Foam Roller": ["High Density Foam Roller", "Vibrating Foam Roller", "Half Round Roller"],
+    "Tent": ["Backpacking Tent", "Car Camping Tent", "Ultralight Tent", "Family Tent"],
+    "Sleeping Bag": ["Mummy Sleeping Bag", "Rectangular Sleeping Bag", "Down Sleeping Bag", "Synthetic Sleeping Bag"],
+}
+
+ATTRIBUTES = [
+    "Lightweight", "Breathable", "Waterproof", "Water-Resistant", "Quick-Dry",
+    "UV Protection", "Moisture-Wicking", "Anti-Odor", "Stretch", "Slim Fit",
+    "Regular Fit", "Relaxed Fit", "Oversized", "Cropped", "High-Waisted",
+    "Men's", "Women's", "Unisex", "Boys'", "Girls'", "Youth",
+    "Plus Size", "Petite", "Tall", "Big & Tall",
+    "2-Pack", "3-Pack", "4-Pack", "6-Pack", "12-Pack",
+    "Pro", "Elite", "Premium", "Classic", "Essential", "Sport",
+    "Wireless", "Bluetooth", "USB-C", "Fast Charge", "Solar",
+    "Eco-Friendly", "Recycled", "Organic", "Natural", "Sustainable",
+    "Adjustable", "Removable", "Reversible", "Convertible", "Foldable",
+    "Heavy Duty", "Ultra-Durable", "Impact Resistant", "Reinforced",
+    "Non-Slip", "Anti-Scratch", "Stain-Resistant",
+    "Machine Washable", "Hand Wash Only", "Dry Clean",
+    "S", "M", "L", "XL", "XXL", "Small", "Medium", "Large", "Extra Large",
+    "Size 8", "Size 9", "Size 10", "Size 11", "Size 12",
+    "4K", "HD", "1080p", "OLED", "AMOLED",
+    "32GB", "64GB", "128GB", "256GB", "512GB",
+    "AA", "AAA",
+]
+
 COLORS = [
-    "red", "blue", "green", "yellow", "orange", "purple", "pink", "black",
-    "white", "gray", "grey", "brown", "beige", "ivory", "cream", "tan",
-    "navy", "teal", "turquoise", "cyan", "magenta", "violet", "indigo",
-    "maroon", "crimson", "scarlet", "coral", "salmon", "peach", "lavender",
-    "lilac", "mauve", "rose", "ruby", "amber", "gold", "silver", "bronze",
-    "copper", "olive", "khaki", "charcoal", "slate", "platinum", "champagne",
-    "caramel", "chocolate", "coffee", "espresso", "mocha", "mint", "sage",
-    "forest", "emerald", "jade", "lime", "lemon", "mustard", "saffron",
-    "ochre", "rust", "burgundy", "wine", "plum", "eggplant", "fuchsia",
-    "hot pink", "baby blue", "sky blue", "royal blue", "cobalt", "sapphire",
-    "aqua", "seafoam", "grass green", "hunter green", "pine", "dark green",
-    "light green", "neon green", "electric blue", "neon pink", "neon yellow",
-    "off white", "snow white", "bone", "ecru", "pearl", "nude", "blush",
-    "dusty rose", "dusty blue", "dusty purple", "pastel pink", "pastel blue",
-    "pastel green", "pastel yellow", "pastel purple", "pastel orange",
-    "multicolor", "multi-color", "multicolored", "tie-dye", "ombre",
-    "gradient", "printed", "striped", "plaid", "checkered", "floral",
-    "camouflage", "camo", "leopard", "zebra", "snake", "animal print",
-    "heather gray", "heather grey", "heather blue", "heather green",
-    "heather purple", "heather navy", "heather charcoal", "melange",
-    "denim", "acid wash", "stone wash", "distressed", "washed",
-    "dark", "light", "medium", "bright", "deep", "pale", "muted",
-    "vibrant", "vivid", "rich", "bold", "soft", "warm", "cool",
-    "natural", "classic", "vintage", "retro", "transparent", "clear",
-    "translucent", "opaque", "glitter", "metallic", "glossy", "matte",
-    "shiny", "sparkle", "iridescent", "holographic", "neon", "fluorescent",
-    "dark blue", "dark red", "dark green", "dark brown", "dark gray",
-    "light blue", "light red", "light green", "light brown", "light gray",
-    "bright red", "bright blue", "bright green", "bright yellow", "bright orange",
-    "deep red", "deep blue", "deep green", "deep purple", "deep navy",
-    "pale blue", "pale green", "pale yellow", "pale pink", "pale purple",
-    "warm white", "cool white", "warm gray", "cool gray", "steel blue",
-    "midnight blue", "ocean blue", "ice blue", "powder blue", "periwinkle",
-    "dusty pink", "hot coral", "terracotta", "clay", "sand", "desert",
-    "cinnamon", "nutmeg", "walnut", "mahogany", "chestnut", "auburn",
-    "strawberry", "watermelon", "tomato", "pumpkin", "tangerine", "mango",
-    "banana", "lemon yellow", "buttercup", "sunshine", "golden", "wheat",
-    "oatmeal", "linen", "vanilla", "almond", "hazel", "driftwood",
+    "Black", "White", "Gray", "Navy", "Red", "Blue", "Green", "Yellow",
+    "Orange", "Purple", "Pink", "Brown", "Beige", "Olive", "Teal",
+    "Charcoal", "Burgundy", "Coral", "Turquoise", "Cream", "Khaki",
+    "Royal Blue", "Forest Green", "Heather Gray", "Light Blue",
+    "Dark Green", "Hot Pink", "Sky Blue", "Mint", "Lavender",
+    "Midnight Blue", "Rose Gold", "Gold", "Silver",
 ]
 
-# Curated material vocabulary (150 entries)
 MATERIALS = [
-    "cotton", "polyester", "nylon", "wool", "silk", "linen", "leather",
-    "suede", "velvet", "denim", "canvas", "fleece", "spandex", "lycra",
-    "elastane", "rayon", "viscose", "acrylic", "cashmere", "angora",
-    "mohair", "alpaca", "merino", "bamboo", "hemp", "lace", "chiffon",
-    "satin", "taffeta", "organza", "tulle", "tweed", "flannel", "corduroy",
-    "twill", "jersey", "knit", "woven", "mesh", "net", "crochet",
-    "embroidered", "printed", "jacquard", "brocade", "sequin", "beaded",
-    "metallic fabric", "faux leather", "vegan leather", "pu leather",
-    "pvc", "rubber", "latex", "foam", "memory foam", "gel", "silicone",
-    "plastic", "abs plastic", "polypropylene", "polycarbonate", "acetal",
-    "neoprene", "gore-tex", "softshell", "hardshell", "ripstop",
-    "microfiber", "microsuede", "sherpa", "plush", "terry", "waffle",
-    "carbon fiber", "fiberglass", "kevlar", "ballistic nylon",
-    "stainless steel", "aluminum", "titanium", "brass", "copper", "zinc",
-    "iron", "steel", "chrome", "nickel", "silver", "gold", "platinum",
-    "wood", "oak", "pine", "walnut", "maple", "bamboo wood", "teak",
-    "mahogany", "birch", "cedar", "plywood", "mdf", "particle board",
-    "glass", "tempered glass", "crystal", "acrylic glass", "plexiglass",
-    "ceramic", "porcelain", "stoneware", "earthenware", "terracotta",
-    "stone", "marble", "granite", "slate", "quartz", "concrete",
-    "natural rubber", "synthetic rubber", "thermoplastic", "resin",
-    "epoxy", "fibre", "fiber", "down", "feather", "fill", "padding",
-    "batting", "stuffing", "recycled", "organic", "sustainable", "eco",
-    "blend", "mixed media", "composite", "laminate", "coated",
-    "water resistant", "waterproof", "breathable", "moisture wicking",
-    "quick dry", "uv resistant", "antimicrobial", "odor resistant",
+    "Cotton", "Polyester", "Nylon", "Wool", "Leather", "Suede",
+    "Mesh", "Fleece", "Spandex", "Denim", "Canvas", "Linen",
+    "Silk", "Velvet", "Jersey", "Microfiber", "Gore-Tex",
+    "Rubber", "Foam", "Memory Foam", "Stainless Steel", "Aluminum",
+    "Carbon Fiber", "Bamboo", "Down", "Synthetic Fill",
+]
+
+# Title templates: each element is either a literal or a field name in brackets
+TEMPLATES = [
+    "{brand} {attr} {color} {material} {category}",
+    "{brand} {color} {material} {category} for {use}",
+    "{brand} {attr} {category} - {color} {material}",
+    "{brand} {category} {color} | {attr} | {material}",
+    "{color} {material} {category} by {brand} - {attr}",
+    "{brand} {attr} {category} ({color}, {material})",
+    "{brand} {color} {category} | {material} | {attr}",
+    "{brand} {material} {color} {category} | {attr}",
+    "{attr} {brand} {category} in {color} {material}",
+    "{brand} {color} {category} with {material} {attr}",
+]
+
+USE_CASES = [
+    "Men", "Women", "Kids", "Adults", "Runners", "Hikers", "Athletes",
+    "Gym", "Office", "Travel", "Outdoor", "Everyday Use",
+    "Training", "Yoga", "Cycling", "Swimming",
 ]
 
 
-def load_config(config_path: str) -> dict:
-    with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+def generate_synthetic_products(n: int, seed: int) -> pd.DataFrame:
+    """
+    Generate n realistic Amazon-style product listings with structured metadata.
+    Returns a DataFrame with columns: title, brand, category, color, material, attribute.
+    """
+    rng = random.Random(seed)
+    np_rng = np.random.default_rng(seed)
 
+    records = []
+    cat_names = list(CATEGORIES.keys())
+    cat_weights = np_rng.dirichlet(np.ones(len(cat_names)) * 2)  # slightly uneven
 
-def download_dataset(config: dict) -> pd.DataFrame:
-    """Download Amazon ESCI or fallback dataset and return as DataFrame."""
-    try:
-        logger.info("Attempting to load amazon_esci dataset...")
-        ds = load_dataset("tasksource/amazon-esci", split="train")
-        df = ds.to_pandas()
-        logger.info(f"Loaded amazon_esci: {len(df)} rows")
-        # Normalize column names to expected fields
-        col_map = {}
-        if "product_title" in df.columns:
-            col_map["product_title"] = "title"
-        if "product_brand" in df.columns:
-            col_map["product_brand"] = "brand"
-        if "product_description" in df.columns:
-            col_map["product_description"] = "description"
-        if "product_bullet_point" in df.columns:
-            col_map["product_bullet_point"] = "bullet_points"
-        df = df.rename(columns=col_map)
-        return df
-    except Exception as e:
-        logger.warning(f"amazon_esci load failed: {e}")
+    for _ in tqdm(range(n), desc="Generating synthetic products"):
+        cat_name = rng.choices(cat_names, weights=cat_weights)[0]
+        subcats = CATEGORIES[cat_name]
+        subcat = rng.choice(subcats)
 
-    try:
-        logger.info("Falling back to McAuley-Lab Amazon Reviews 2023...")
-        ds = load_dataset(
-            "McAuley-Lab/Amazon-Reviews-2023",
-            "raw_meta_Clothing_Shoes_and_Jewelry",
-            split="full",
-            trust_remote_code=True,
+        brand = rng.choice(BRANDS)
+        color = rng.choice(COLORS)
+        material = rng.choice(MATERIALS)
+        attr = rng.choice(ATTRIBUTES)
+        use = rng.choice(USE_CASES)
+
+        template = rng.choice(TEMPLATES)
+        title = template.format(
+            brand=brand, color=color, material=material,
+            category=subcat, attr=attr, use=use,
         )
-        df = ds.to_pandas()
-        logger.info(f"Loaded Amazon Reviews 2023: {len(df)} rows")
-        col_map = {}
-        if "title" not in df.columns and "store" in df.columns:
-            df["title"] = df.get("title", df.get("description", ""))
-        if "brand" not in df.columns and "store" in df.columns:
-            df["brand"] = df["store"]
-        if "category" not in df.columns and "main_category" in df.columns:
-            df["category"] = df["main_category"]
-        return df
-    except Exception as e:
-        logger.error(f"Fallback dataset load also failed: {e}")
-        raise RuntimeError("Could not load any dataset. Check internet connection.") from e
 
+        records.append({
+            "title": title,
+            "brand": brand,
+            "category": cat_name,
+            "subcategory": subcat,
+            "color": color,
+            "material": material,
+            "attribute": attr,
+        })
 
-def sample_balanced(df: pd.DataFrame, sample_size: int, seed: int) -> pd.DataFrame:
-    """Sample proportionally across top-20 categories."""
-    cat_col = "category" if "category" in df.columns else (
-        "product_type" if "product_type" in df.columns else None
-    )
-    if cat_col is None or df[cat_col].isna().all():
-        return df.sample(min(sample_size, len(df)), random_state=seed).reset_index(drop=True)
-
-    top_cats = df[cat_col].value_counts().head(20).index
-    df_top = df[df[cat_col].isin(top_cats)].copy()
-    if len(df_top) < sample_size:
-        df_top = df.copy()
-
-    per_cat = sample_size // min(20, df_top[cat_col].nunique())
-    parts = []
-    for cat in df_top[cat_col].unique():
-        chunk = df_top[df_top[cat_col] == cat]
-        parts.append(chunk.sample(min(per_cat, len(chunk)), random_state=seed))
-
-    sampled = pd.concat(parts).sample(frac=1, random_state=seed)
-    if len(sampled) < sample_size:
-        remaining = df[~df.index.isin(sampled.index)]
-        extra = remaining.sample(min(sample_size - len(sampled), len(remaining)), random_state=seed)
-        sampled = pd.concat([sampled, extra])
-
-    return sampled.head(sample_size).reset_index(drop=True)
-
-
-def _find_span(tokens: list[str], phrase: str) -> list[tuple[int, int]]:
-    """Find all token spans matching a multi-word phrase (case-insensitive)."""
-    phrase_tokens = phrase.lower().split()
-    n = len(phrase_tokens)
-    spans = []
-    for i in range(len(tokens) - n + 1):
-        if [t.lower() for t in tokens[i:i+n]] == phrase_tokens:
-            spans.append((i, i + n))
-    return spans
+    return pd.DataFrame(records)
 
 
 def generate_silver_labels(row: pd.Series) -> dict | None:
     """
-    Rule-based silver label generation.
-    Uses brand/category fields and color/material dictionaries to produce BIO tags.
-    Returns None if the title is missing or too short.
+    Generate BIO labels by matching known entity strings in the title.
+    Since we generated the title we have perfect alignment.
     """
-    title = str(row.get("title", "") or "").strip()
+    title = str(row.get("title", "")).strip()
     if len(title) < 3:
         return None
 
     tokens = title.split()
     labels = ["O"] * len(tokens)
 
-    def tag_span(span_start: int, span_end: int, entity_type: str):
-        labels[span_start] = f"B-{entity_type}"
-        for i in range(span_start + 1, span_end):
+    def tag_span(start: int, end: int, entity_type: str):
+        labels[start] = f"B-{entity_type}"
+        for i in range(start + 1, end):
             labels[i] = f"I-{entity_type}"
 
-    # Brand labels from structured field
-    brand = str(row.get("brand", "") or "").strip()
-    if brand and brand.lower() not in ("", "nan", "none", "unknown"):
-        for start, end in _find_span(tokens, brand):
-            tag_span(start, end, "BRAND")
+    def find_and_tag(phrase: str, entity_type: str):
+        if not phrase or phrase.lower() in ("nan", "none", ""):
+            return
+        phrase_tokens = phrase.lower().split()
+        n = len(phrase_tokens)
+        for i in range(len(tokens) - n + 1):
+            window = [t.lower() for t in tokens[i:i + n]]
+            if window == phrase_tokens and labels[i] == "O":
+                tag_span(i, i + n, entity_type)
+                return
 
-    # Category labels from structured field
-    category = str(row.get("category", row.get("product_type", "")) or "").strip()
-    if category and category.lower() not in ("", "nan", "none", "unknown"):
-        cat_short = category.split(">")[-1].strip() if ">" in category else category
-        for start, end in _find_span(tokens, cat_short):
-            tag_span(start, end, "CATEGORY")
-
-    # Color labels from dictionary
-    title_lower = title.lower()
-    for color in sorted(COLORS, key=len, reverse=True):
-        if color in title_lower:
-            for start, end in _find_span(tokens, color):
-                if labels[start] == "O":
-                    tag_span(start, end, "COLOR")
-
-    # Material labels from dictionary
-    for material in sorted(MATERIALS, key=len, reverse=True):
-        if material in title_lower:
-            for start, end in _find_span(tokens, material):
-                if labels[start] == "O":
-                    tag_span(start, end, "MATERIAL")
+    find_and_tag(str(row.get("brand", "")), "BRAND")
+    find_and_tag(str(row.get("category", "")), "CATEGORY")
+    find_and_tag(str(row.get("subcategory", "")), "CATEGORY")
+    find_and_tag(str(row.get("color", "")), "COLOR")
+    find_and_tag(str(row.get("material", "")), "MATERIAL")
+    find_and_tag(str(row.get("attribute", "")), "ATTRIBUTE")
 
     return {"tokens": tokens, "labels": labels}
 
 
-def split_and_save(records: list[dict], processed_dir: str, config: dict):
-    """Split into train/val/test and save as JSONL."""
+def load_config(config_path: str) -> dict:
+    with open(config_path) as f:
+        return yaml.safe_load(f)
+
+
+def split_and_save(records: list, processed_dir: str, config: dict):
     seed = config["data"]["seed"]
     random.seed(seed)
     random.shuffle(records)
-
     n = len(records)
     train_end = int(n * config["data"]["train_split"])
     val_end = train_end + int(n * config["data"]["val_split"])
-
     splits = {
         "ner_train": records[:train_end],
         "ner_val": records[train_end:val_end],
         "ner_test": records[val_end:],
     }
-
     os.makedirs(processed_dir, exist_ok=True)
     for split_name, split_records in splits.items():
         path = os.path.join(processed_dir, f"{split_name}.json")
@@ -264,15 +268,17 @@ def main(config_path: str = "config/config.yaml"):
     os.makedirs(processed_dir, exist_ok=True)
     os.makedirs(samples_dir, exist_ok=True)
 
-    # Download and sample
-    df = download_dataset(config)
-    df = sample_balanced(df, config["data"]["sample_size"], config["data"]["seed"])
-    logger.info(f"Sampled {len(df)} products")
+    n = config["data"]["sample_size"]
+    seed = config["data"]["seed"]
 
-    # Save raw sample
+    logger.info(f"Generating {n} synthetic product listings (seed={seed})...")
+    df = generate_synthetic_products(n, seed)
+    logger.info(f"Generated {len(df)} products across {df['category'].nunique()} categories")
+
+    # Save raw parquet
     raw_path = os.path.join(raw_dir, "products_sampled.parquet")
     df.to_parquet(raw_path, index=False)
-    logger.info(f"Saved raw sample to {raw_path}")
+    logger.info(f"Saved raw data to {raw_path}")
 
     # Save 500-row sample CSV
     sample_path = os.path.join(samples_dir, "products_sample.csv")
@@ -280,16 +286,14 @@ def main(config_path: str = "config/config.yaml"):
     logger.info(f"Saved 500-row sample to {sample_path}")
 
     # Generate silver labels
-    logger.info("Generating silver labels...")
+    logger.info("Generating BIO labels...")
     records = []
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Silver labeling"):
         result = generate_silver_labels(row)
-        if result is not None and len(result["tokens"]) > 0:
+        if result and len(result["tokens"]) > 0:
             records.append(result)
+    logger.info(f"Labeled {len(records)} examples")
 
-    logger.info(f"Generated {len(records)} labeled examples")
-
-    # Split and save
     split_and_save(records, processed_dir, config)
 
 

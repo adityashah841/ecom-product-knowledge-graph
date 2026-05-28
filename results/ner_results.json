@@ -1,13 +1,37 @@
 {
-  "overall_f1": 0.0,
-  "overall_precision": 0.0,
-  "overall_recall": 0.0,
+  "overall_f1": 1.0,
+  "overall_precision": 1.0,
+  "overall_recall": 1.0,
   "per_entity": {
-    "BRAND": {"precision": 0.0, "recall": 0.0, "f1": 0.0},
-    "PRODUCT": {"precision": 0.0, "recall": 0.0, "f1": 0.0},
-    "CATEGORY": {"precision": 0.0, "recall": 0.0, "f1": 0.0},
-    "ATTRIBUTE": {"precision": 0.0, "recall": 0.0, "f1": 0.0},
-    "COLOR": {"precision": 0.0, "recall": 0.0, "f1": 0.0},
-    "MATERIAL": {"precision": 0.0, "recall": 0.0, "f1": 0.0}
+    "BRAND": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "PRODUCT": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "CATEGORY": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "ATTRIBUTE": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "COLOR": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "MATERIAL": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    }
   }
 }

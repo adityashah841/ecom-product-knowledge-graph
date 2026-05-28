@@ -169,6 +169,8 @@ class PseudoLabelingLoop:
             train_dataset = NERDataset(train_path, tokenizer, label2id, self.config["data"]["max_seq_length"])
             train_loader = DataLoader(train_dataset, batch_size=self.ner_cfg["batch_size"], shuffle=True, collate_fn=collate_fn, num_workers=0)
 
+            # Patch lr to float in case YAML parsed it as string
+            self.config["ner"]["learning_rate"] = float(self.config["ner"]["learning_rate"])
             optimizer = get_optimizer(model, self.config)
             total_steps = len(train_loader) * 2
             scheduler = get_linear_schedule_with_warmup(optimizer, 50, total_steps)

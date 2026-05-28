@@ -31,16 +31,10 @@ def load_config(path: str) -> dict:
 
 
 def get_optimizer(model, config: dict):
-    lr = config["ner"]["learning_rate"]
-    wd = config["ner"]["weight_decay"]
-    try:
-        import bitsandbytes as bnb
-        logger.info("Using 8-bit Adam optimizer")
-        return bnb.optim.Adam8bit(model.parameters(), lr=lr, weight_decay=wd)
-    except Exception:
-        logger.info("bitsandbytes not available — using AdamW")
-        from torch.optim import AdamW
-        return AdamW(model.parameters(), lr=lr, weight_decay=wd)
+    lr = float(config["ner"]["learning_rate"])
+    wd = float(config["ner"]["weight_decay"])
+    from torch.optim import AdamW
+    return AdamW(model.parameters(), lr=lr, weight_decay=wd)
 
 
 def train_epoch(model, loader, optimizer, scheduler, scaler, device, fp16: bool):

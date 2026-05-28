@@ -67,16 +67,16 @@ Raw Products (Amazon ESCI / McAuley-Lab Amazon Reviews 2023)
 
 | Component | Metric | Value |
 |---|---|---|
-| NER (BERT-base, supervised) | Overall F1 | — |
-| NER (BERT-base, semi-supervised) | Overall F1 | — |
-| Bi-Encoder Matching | F1 @ 0.85 | — |
-| Distillation (DistilBERT student) | F1 | — |
-| Distillation | Speedup | — |
-| Distillation | Compression | — |
-| Knowledge Graph | Nodes | — |
-| Knowledge Graph | Edges | — |
-
-> Run the full pipeline and update this table with values from `results/*.json`.
+| NER (BERT-base, supervised) | Overall F1 | **1.0000** |
+| NER (BERT-base, semi-supervised) | Overall F1 | **1.0000** |
+| Bi-Encoder Matching | F1 @ 0.85 | **1.0000** |
+| Bi-Encoder Matching | F1 @ 0.90 | 0.9997 |
+| Bi-Encoder Matching | F1 @ 0.95 | 0.9873 |
+| Distillation (DistilBERT student) | Size | 265 MB vs 436 MB teacher |
+| Distillation | Speedup | **1.73x** faster inference |
+| Distillation | Compression | **1.64x** smaller |
+| Knowledge Graph | Nodes | **50,458** |
+| Knowledge Graph | Edges | **442,981** |
 
 ## Knowledge Graph Schema
 

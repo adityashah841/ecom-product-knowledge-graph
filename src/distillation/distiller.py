@@ -37,7 +37,7 @@ class DistilledNERStudent(nn.Module):
         super().__init__()
         self.model = DistilBertForTokenClassification.from_pretrained(model_name, num_labels=num_labels)
         if gradient_checkpointing:
-            self.model.distilbert.enable_gradient_checkpointing()
+            self.model.gradient_checkpointing_enable()
 
     def forward(self, input_ids, attention_mask, labels=None):
         # DistilBERT doesn't use token_type_ids
@@ -129,7 +129,7 @@ def distill(config_path: str, output_dir: str, device_str: str):
     train_loader = DataLoader(train_dataset, batch_size=d_cfg["batch_size"], shuffle=True, collate_fn=collate_fn, num_workers=0)
     val_loader = DataLoader(val_dataset, batch_size=d_cfg["batch_size"], shuffle=False, collate_fn=collate_fn, num_workers=0)
 
-    optimizer = AdamW(student.parameters(), lr=d_cfg["learning_rate"])
+    optimizer = AdamW(student.parameters(), lr=float(d_cfg["learning_rate"]))
     total_steps = len(train_loader) * d_cfg["num_epochs"]
     scheduler = get_linear_schedule_with_warmup(optimizer, 100, total_steps)
     scaler = GradScaler(enabled=d_cfg["fp16"] and torch.cuda.is_available())

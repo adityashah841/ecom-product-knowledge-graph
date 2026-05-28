@@ -64,7 +64,7 @@ def train(config_path: str, output_dir: str, device_str: str):
     val_loader = DataLoader(val_ds, batch_size=m_cfg["batch_size"], shuffle=False, collate_fn=matching_collate_fn, num_workers=0)
 
     model = BiEncoderModel(m_cfg["model_name"]).to(device)
-    optimizer = AdamW(model.parameters(), lr=m_cfg["learning_rate"])
+    optimizer = AdamW(model.parameters(), lr=float(m_cfg["learning_rate"]))
     total_steps = len(train_loader) * m_cfg["num_epochs"]
     scheduler = get_linear_schedule_with_warmup(optimizer, 100, total_steps)
     scaler = GradScaler(enabled=m_cfg["fp16"] and torch.cuda.is_available())
