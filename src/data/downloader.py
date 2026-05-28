@@ -164,6 +164,11 @@ def load_esci_products(filepath: str, sample_size: int, seed: int) -> pd.DataFra
 
     # Proportional sampling across top-20 product_type_id values
     type_col = "product_type_id" if "product_type_id" in df.columns else None
+    if not type_col:
+        logger.warning(
+            "product_type_id column not found in ESCI parquet — falling back to random sampling. "
+            "Proportional-by-type sampling is unavailable."
+        )
     if type_col:
         top_types = df[type_col].value_counts().head(20).index
         df_pool = df[df[type_col].isin(top_types)].copy()
@@ -252,14 +257,15 @@ def generate_silver_labels(row: pd.Series) -> dict | None:
     for color, pattern in _COLOR_PATTERNS.items():
         if pattern.search(title_lower):
             for start, end in _find_span(tokens, color):
-                if labels[start] == "O":
+                if all(labels[i] == "O" for i in range(start, end)):
                     tag_span(start, end, "COLOR")
+                    break
 
     # Category from vocabulary (whole-word regex, longest match first)
     for category, pattern in _CATEGORY_PATTERNS.items():
         if pattern.search(title_lower):
             for start, end in _find_span(tokens, category):
-                if labels[start] == "O":
+                if all(labels[i] == "O" for i in range(start, end)):
                     tag_span(start, end, "CATEGORY")
 
     return {"tokens": tokens, "labels": labels}

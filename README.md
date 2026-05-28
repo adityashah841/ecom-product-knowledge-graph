@@ -15,7 +15,7 @@ Amazon ESCI Dataset (1.2M US product listings → 75K sampled)
 ┌─────────────────────────────────────────────────────────────┐
 │  STAGE 1: Data Pipeline                                     │
 │  • Load ESCI parquet, filter US locale, sample 75K          │
-│  • Rule-based silver labels (brand/color distant supervision)│
+│  • Rule-based silver labels (brand/color/category distant supervision)│
 │  • Train/val/test split → NER JSONL files                   │
 │  • Build positive + hard-negative matching pairs            │
 └──────────────────────────┬──────────────────────────────────┘
@@ -83,22 +83,20 @@ Amazon ESCI Dataset (1.2M US product listings → 75K sampled)
 
 NER silver labels are generated via rule-based brand/color/category matching on real product metadata, achieving **80.1% coverage** (60,087/75,000 products labeled; see `results/silver_label_stats.json`). The overall F1 of 0.8987 reflects performance on the three entity types present in the silver labels (BRAND, COLOR, CATEGORY).
 
+> **Note on F1 reporting:** The 0.8987 figure (and per-entity scores) are **test-set** F1 from `results/ner_results.json`. The semi-supervised 0.9010 figure is the best **validation-set** F1 observed during the final pseudo-labeling iteration; the held-out test set was not re-evaluated after semi-supervised retraining.
+
 ## Knowledge Graph Schema
 
 **Node types:**
 - `Product` — individual product listing (asin, title, confidence_score)
 - `Brand` — manufacturer / seller brand (name)
 - `Category` — product category / type (name)
-- `Attribute` — product attribute (name)
 - `Color` — color entity (name)
-- `Material` — material entity (name)
 
 **Edge types:**
 - `(Product) -[MADE_BY]-> (Brand)`
 - `(Product) -[BELONGS_TO]-> (Category)`
-- `(Product) -[HAS_ATTRIBUTE]-> (Attribute)`
 - `(Product) -[HAS_COLOR]-> (Color)`
-- `(Product) -[MADE_FROM]-> (Material)`
 - `(Product) -[VARIANT_OF]-> (Product)` — from bi-encoder deduplication; VARIANT_OF edges use similarity threshold 0.70 (best F1 on validation set per `results/matching_results.json` threshold sweep)
 
 **Example subgraph:**
@@ -165,7 +163,7 @@ The pipeline uses real product listings from the **[Amazon ESCI dataset](https:/
 **Sampling:**
 - Full dataset: 1,814,924 listings across all locales
 - Filter to `product_locale == "us"`: 1,215,854 listings
-- Proportional sample by `product_type_id` (top-20 types): **75,000 products**
+- Random sample across US listings: **75,000 products** (`product_type_id` column absent from this ESCI release)
 - Columns used: `product_id`, `product_title`, `product_brand`, `product_color`
 
 **Silver label generation** (`src/data/downloader.py`):
