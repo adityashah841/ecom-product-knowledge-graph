@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project builds a complete, end-to-end product knowledge graph pipeline over 75,000 real Amazon product listings drawn from the [Amazon ESCI dataset](https://github.com/amazon-science/esci-data). Starting from raw product titles, it applies BERT-based named entity recognition to extract structured entities (brands, colors), uses a bi-encoder model to deduplicate product variants, and constructs a queryable knowledge graph with over 70,000 nodes and 4 edge types.
+This project builds a complete, end-to-end product knowledge graph pipeline over 75,000 real Amazon product listings drawn from the [Amazon ESCI dataset](https://github.com/amazon-science/esci-data). Starting from raw product titles, it applies BERT-based named entity recognition to extract structured entities (brands, colors, and categories), uses a bi-encoder model to deduplicate product variants, and constructs a queryable knowledge graph with over 70,000 nodes and 4 edge types.
 
 The pipeline demonstrates the full ML lifecycle: distant-supervision silver labeling on real product metadata, supervised fine-tuning, semi-supervised pseudo-labeling, knowledge graph construction in NetworkX with optional Neo4j ingestion, and model compression via BERT-base → DistilBERT knowledge distillation. All training runs on an RTX 3050 (4GB VRAM) using fp16 and gradient checkpointing.
 
@@ -104,7 +104,6 @@ NER silver labels are generated via rule-based brand/color/category matching on 
 [Nike Air Max 270] -MADE_BY->    [Nike]
                    -BELONGS_TO-> [Running Shoes]
                    -HAS_COLOR->  [Black]
-                   -MADE_FROM->  [Mesh]
                    -VARIANT_OF-> [Nike Air Max 270 (White)]
 ```
 
