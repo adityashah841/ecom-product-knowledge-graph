@@ -57,6 +57,7 @@ Amazon ESCI Dataset (1.2M US product listings → 75K sampled)
 │  STAGE 6: Knowledge Graph Construction                      │
 │  • Batch NER inference on all 75K products                  │
 │  • VARIANT_OF edges from bi-encoder duplicate pairs         │
+│    (similarity threshold 0.70 — best F1 per threshold sweep)│
 │  • NetworkX DiGraph → results/product_kg.graphml            │
 │  • pyvis interactive HTML + matplotlib overview chart       │
 │  • Optional Neo4j ingestion                                 │
@@ -98,7 +99,7 @@ NER silver labels are generated via rule-based brand/color/category matching on 
 - `(Product) -[HAS_ATTRIBUTE]-> (Attribute)`
 - `(Product) -[HAS_COLOR]-> (Color)`
 - `(Product) -[MADE_FROM]-> (Material)`
-- `(Product) -[VARIANT_OF]-> (Product)` — from bi-encoder deduplication
+- `(Product) -[VARIANT_OF]-> (Product)` — from bi-encoder deduplication; VARIANT_OF edges use similarity threshold 0.70 (best F1 on validation set per `results/matching_results.json` threshold sweep)
 
 **Example subgraph:**
 ```
