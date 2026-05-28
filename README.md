@@ -2,20 +2,20 @@
 
 ## Overview
 
-This project builds a complete, end-to-end product knowledge graph pipeline over 75,000 e-commerce product listings. Starting from raw product titles, it applies BERT-based named entity recognition to extract structured entities (brands, categories, colors, materials, attributes), uses a bi-encoder model to deduplicate product variants, and constructs a queryable knowledge graph with over 50,000 nodes and 6 relationship types.
+This project builds a complete, end-to-end product knowledge graph pipeline over 75,000 real Amazon product listings drawn from the [Amazon ESCI dataset](https://github.com/amazon-science/esci-data). Starting from raw product titles, it applies BERT-based named entity recognition to extract structured entities (brands, colors), uses a bi-encoder model to deduplicate product variants, and constructs a queryable knowledge graph with over 70,000 nodes and 3 relationship types.
 
-The pipeline demonstrates the full ML lifecycle: programmatic training data generation, supervised fine-tuning, semi-supervised pseudo-labeling, knowledge graph construction in NetworkX with optional Neo4j ingestion, and model compression via BERT-base → DistilBERT knowledge distillation. All training runs on an RTX 3050 (4GB VRAM) using fp16 and gradient checkpointing.
+The pipeline demonstrates the full ML lifecycle: distant-supervision silver labeling on real product metadata, supervised fine-tuning, semi-supervised pseudo-labeling, knowledge graph construction in NetworkX with optional Neo4j ingestion, and model compression via BERT-base → DistilBERT knowledge distillation. All training runs on an RTX 3050 (4GB VRAM) using fp16 and gradient checkpointing.
 
 ## Architecture
 
 ```
-Synthetic Product Catalogue (75K titles, 171 brands, 30 categories)
+Amazon ESCI Dataset (1.2M US product listings → 75K sampled)
         │
         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  STAGE 1: Data Pipeline                                     │
-│  • Generate 75K product listings via template synthesis     │
-│  • Perfect BIO labels (no noise — titles built from fields) │
+│  • Load ESCI parquet, filter US locale, sample 75K          │
+│  • Rule-based silver labels (brand/color distant supervision)│
 │  • Train/val/test split → NER JSONL files                   │
 │  • Build positive + hard-negative matching pairs            │
 └──────────────────────────┬──────────────────────────────────┘
@@ -23,8 +23,8 @@ Synthetic Product Catalogue (75K titles, 171 brands, 30 categories)
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  STAGE 2: NER Fine-Tuning (BERT-base)                       │
-│  • BertForTokenClassification, 6 entity types (BIO tags)   │
-│  • fp16 + gradient checkpointing + 8-bit AdamW             │
+│  • BertForTokenClassification, 2 entity types (BIO tags)   │
+│  • fp16 + gradient checkpointing + AdamW                   │
 │  • seqeval evaluation → results/ner_results.json            │
 └──────────────────────────┬──────────────────────────────────┘
                            │
@@ -67,18 +67,19 @@ Synthetic Product Catalogue (75K titles, 171 brands, 30 categories)
 
 | Component | Metric | Value |
 |---|---|---|
-| NER (BERT-base, supervised) | Overall F1 | **1.0000** |
-| NER (BERT-base, semi-supervised) | Overall F1 | **1.0000** |
-| Bi-Encoder Matching | F1 @ 0.85 | **1.0000** |
-| Bi-Encoder Matching | F1 @ 0.90 | 0.9997 |
-| Bi-Encoder Matching | F1 @ 0.95 | 0.9873 |
+| NER (BERT-base, supervised) | Overall F1 | **0.8683** |
+| NER — BRAND entity | F1 | **0.8818** |
+| NER — COLOR entity | F1 | **0.8467** |
+| NER (after semi-supervised expansion) | Overall F1 | **0.8710** |
+| Bi-Encoder Matching | Best F1 (@ 0.70) | **0.8636** |
+| Bi-Encoder Matching | F1 @ 0.85 | 0.6461 |
 | Distillation (DistilBERT student) | Size | 265 MB vs 436 MB teacher |
-| Distillation | Speedup | **1.73x** faster inference |
+| Distillation | Speedup | **1.99x** faster inference |
 | Distillation | Compression | **1.64x** smaller |
-| Knowledge Graph | Nodes | **50,458** |
-| Knowledge Graph | Edges | **442,981** |
+| Knowledge Graph | Nodes | **70,853** |
+| Knowledge Graph | Edges | **89,777** |
 
-> **On the perfect F1 scores:** NER and matching both achieve F1=1.0 because the training data is synthetically generated with exact, noise-free labels (see [Dataset](#dataset) section). This validates that the model architecture and training pipeline are correctly implemented. On a real-world noisy corpus (scraped Amazon listings with imperfect brand matching), expect NER F1 in the 0.75–0.88 range — the pipeline is designed to handle that via the semi-supervised expansion stage.
+NER silver labels are generated via rule-based brand/color matching on real product metadata, achieving **74.5% coverage** (55,897/75,000 products labeled; see `results/silver_label_stats.json`). The overall F1 of 0.8683 reflects performance on the two entity types present in the silver labels (BRAND and COLOR).
 
 ## Knowledge Graph Schema
 
@@ -153,40 +154,30 @@ from src.ner.predict import predict_entities
 
 ## Dataset
 
-### Synthetic Product Catalogue
+### Amazon ESCI Product Catalogue
 
-The pipeline generates a **75,000-product synthetic catalogue** (`src/data/downloader.py`) rather than scraping a live dataset. This was a deliberate engineering decision made after HuggingFace deprecated custom dataset loading scripts in `datasets` v4.x, which broke both the Amazon ESCI and McAuley-Lab Amazon Reviews 2023 loaders.
+The pipeline uses real product listings from the **[Amazon ESCI dataset](https://github.com/amazon-science/esci-data)** (Reddy et al., 2022), the same corpus used in the Amazon KDD Cup 2022 product search challenge.
 
-The synthetic generator produces realistic Amazon-style product titles by combining:
-- **171 real brand names** (Nike, Apple, Carhartt, KitchenAid, Dewalt, …)
-- **30 product categories** with subcategory variants (Running Shoes → Road/Trail/Racing Flats, …)
-- **34 colors**, **26 materials**, **80+ attributes** drawn from curated vocabularies
-- **10 title templates** that mirror real listing patterns:
-  ```
-  "{Brand} {Attr} {Color} {Material} {Category}"
-  "{Brand} {Color} {Category} for {Use} | {Material} | {Attr}"
-  "{Color} {Material} {Category} by {Brand} - {Attr}"
-  ```
+**Source file:** `shopping_queries_dataset/shopping_queries_dataset_products.parquet` (~1.06 GB via Git LFS)
 
-**Why this works better than distant supervision:**
+**Sampling:**
+- Full dataset: 1,814,924 listings across all locales
+- Filter to `product_locale == "us"`: 1,215,854 listings
+- Proportional sample by `product_type_id` (top-20 types): **75,000 products**
+- Columns used: `product_id`, `product_title`, `product_brand`, `product_color`
 
-Real Amazon datasets require rule-based silver labeling — matching a brand string into a noisy title — which produces label noise whenever a brand name appears mid-word, is abbreviated, or conflicts with a product term. The synthetic approach flips this: since we *construct* each title from known entity strings, every BIO label is guaranteed correct. The model learns from a perfectly consistent signal, which is why NER F1 converges to 1.0 by epoch 2.
-
-This is a standard technique in low-resource NLP (see [Few-NERD](https://arxiv.org/abs/2105.07464), [CrossNER](https://arxiv.org/abs/2012.04373)) and is legitimate for demonstrating pipeline architecture when the goal is the system design, not a benchmark comparison on a specific corpus.
-
-**To swap in a real dataset:** replace `generate_synthetic_products()` in `src/data/downloader.py` with any DataFrame that has `title`, `brand`, and `category` columns. The rest of the pipeline is dataset-agnostic.
-
-**Sampling strategy:** Products are sampled proportionally across all 30 categories using a Dirichlet-weighted distribution to ensure category balance without being perfectly uniform (matching real-world long-tail behavior).
-
-**Label generation:**
-- Brand name → `B-BRAND / I-BRAND` by exact token match in title
-- Category / subcategory → `B-CATEGORY / I-CATEGORY`
-- Color → `B-COLOR / I-COLOR`
-- Material → `B-MATERIAL`
-- Attribute → `B-ATTRIBUTE`
+**Silver label generation** (`src/data/downloader.py`):
+- **BRAND**: whole-word token match of `product_brand` in title (≥3 chars, ≤3 occurrences) → `B-BRAND / I-BRAND`
+- **COLOR**: whole-word regex `\b{color}\b` against a 90-term color vocabulary, falling back to the `product_color` field → `B-COLOR / I-COLOR`
 - All other tokens → `O`
+- Coverage: **74.5%** of products received at least one entity label (see `results/silver_label_stats.json`)
 
-Because titles are built from these fields, match rate is 100% and there is no label noise.
+**To reproduce:**
+```bash
+git clone https://github.com/amazon-science/esci-data.git ~/Desktop/esci-data
+git -C ~/Desktop/esci-data lfs pull --include="shopping_queries_dataset/shopping_queries_dataset_products.parquet"
+python -m src.pipeline --config config/config.yaml
+```
 
 ## Technical Details
 

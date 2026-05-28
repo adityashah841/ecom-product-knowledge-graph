@@ -1,0 +1,6 @@
+{
+  "total_examples": 75000,
+  "labeled_examples": 55897,
+  "coverage_pct": 74.53,
+  "unlabeled_examples": 19103
+}

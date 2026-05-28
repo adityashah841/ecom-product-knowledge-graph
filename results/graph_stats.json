@@ -1,23 +1,17 @@
 {
-  "total_nodes": 50458,
-  "total_edges": 442981,
+  "total_nodes": 70853,
+  "total_edges": 89777,
   "nodes_by_type": {
     "Product": 50000,
-    "ATTRIBUTE": 87,
-    "BRAND": 171,
-    "CATEGORY": 140,
-    "COLOR": 34,
-    "MATERIAL": 26
+    "COLOR": 2728,
+    "BRAND": 18125
   },
   "edges_by_type": {
-    "HAS_ATTRIBUTE": 45112,
-    "MADE_BY": 50000,
-    "BELONGS_TO": 50000,
-    "HAS_COLOR": 45049,
-    "MADE_FROM": 45049,
-    "VARIANT_OF": 207771
+    "HAS_COLOR": 19541,
+    "MADE_BY": 32866,
+    "VARIANT_OF": 37370
   },
-  "average_degree": 17.56,
-  "num_weakly_connected_components": 1,
+  "average_degree": 2.53,
+  "num_weakly_connected_components": 21866,
   "top_10_brands_by_degree": []
 }

@@ -3,15 +3,15 @@
     "model": "bert-base-uncased",
     "size_mb": 435.61,
     "f1": 0.0,
-    "inference_ms_per_batch": 12.45
+    "inference_ms_per_batch": 13.09
   },
   "student": {
     "model": "distilbert-base-uncased",
     "size_mb": 265.49,
     "f1": 0.0,
-    "inference_ms_per_batch": 7.19
+    "inference_ms_per_batch": 6.58
   },
   "compression_ratio": 1.64,
-  "speedup": 1.73,
+  "speedup": 1.99,
   "f1_retention_pct": 0.0
 }
