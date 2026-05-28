@@ -23,7 +23,7 @@ Amazon ESCI Dataset (1.2M US product listings → 75K sampled)
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  STAGE 2: NER Fine-Tuning (BERT-base)                       │
-│  • BertForTokenClassification, 2 entity types (BIO tags)   │
+│  • BertForTokenClassification, 3 entity types (BIO tags)   │
 │  • fp16 + gradient checkpointing + AdamW                   │
 │  • seqeval evaluation → results/ner_results.json            │
 └──────────────────────────┬──────────────────────────────────┘
@@ -67,10 +67,11 @@ Amazon ESCI Dataset (1.2M US product listings → 75K sampled)
 
 | Component | Metric | Value |
 |---|---|---|
-| NER (BERT-base, supervised) | Overall F1 | **0.8683** |
-| NER — BRAND entity | F1 | **0.8818** |
-| NER — COLOR entity | F1 | **0.8467** |
-| NER (after semi-supervised expansion) | Overall F1 | **0.8710** |
+| NER (BERT-base, supervised) | Overall F1 | **0.8987** |
+| NER — BRAND entity | F1 | **0.8789** |
+| NER — COLOR entity | F1 | **0.8557** |
+| NER — CATEGORY entity | F1 | **0.9825** |
+| NER (after semi-supervised expansion) | Overall F1 | **0.9010** |
 | Bi-Encoder Matching | Best F1 (@ 0.70) | **0.8636** |
 | Bi-Encoder Matching | F1 @ 0.85 | 0.6461 |
 | Distillation (DistilBERT student) | Size | 265 MB vs 436 MB teacher |
@@ -79,7 +80,7 @@ Amazon ESCI Dataset (1.2M US product listings → 75K sampled)
 | Knowledge Graph | Nodes | **70,853** |
 | Knowledge Graph | Edges | **89,777** |
 
-NER silver labels are generated via rule-based brand/color matching on real product metadata, achieving **74.5% coverage** (55,897/75,000 products labeled; see `results/silver_label_stats.json`). The overall F1 of 0.8683 reflects performance on the two entity types present in the silver labels (BRAND and COLOR).
+NER silver labels are generated via rule-based brand/color/category matching on real product metadata, achieving **80.1% coverage** (60,087/75,000 products labeled; see `results/silver_label_stats.json`). The overall F1 of 0.8987 reflects performance on the three entity types present in the silver labels (BRAND, COLOR, CATEGORY).
 
 ## Knowledge Graph Schema
 
@@ -169,8 +170,9 @@ The pipeline uses real product listings from the **[Amazon ESCI dataset](https:/
 **Silver label generation** (`src/data/downloader.py`):
 - **BRAND**: whole-word token match of `product_brand` in title (≥3 chars, ≤3 occurrences) → `B-BRAND / I-BRAND`
 - **COLOR**: whole-word regex `\b{color}\b` against a 90-term color vocabulary, falling back to the `product_color` field → `B-COLOR / I-COLOR`
+- **CATEGORY**: whole-word regex scan against a curated 100-term product category vocabulary (apparel, footwear, electronics, home & kitchen, tools, beauty, sports, etc.) → `B-CATEGORY / I-CATEGORY`
 - All other tokens → `O`
-- Coverage: **74.5%** of products received at least one entity label (see `results/silver_label_stats.json`)
+- Coverage: **80.1%** of products received at least one entity label (see `results/silver_label_stats.json`)
 
 **To reproduce:**
 ```bash

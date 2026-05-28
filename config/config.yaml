@@ -20,16 +20,10 @@ ner:
     - "O"
     - "B-BRAND"
     - "I-BRAND"
-    - "B-PRODUCT"
-    - "I-PRODUCT"
-    - "B-CATEGORY"
-    - "I-CATEGORY"
-    - "B-ATTRIBUTE"
-    - "I-ATTRIBUTE"
     - "B-COLOR"
     - "I-COLOR"
-    - "B-MATERIAL"
-    - "I-MATERIAL"
+    - "B-CATEGORY"
+    - "I-CATEGORY"
 
 matching:
   model_name: "sentence-transformers/all-MiniLM-L6-v2"

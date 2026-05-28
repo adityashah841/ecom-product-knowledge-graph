@@ -2,23 +2,23 @@
   "iterations": [
     {
       "iteration": 1,
-      "examples_added": 229,
-      "val_f1_before": 0.8669,
-      "val_f1_after": 0.8671
+      "examples_added": 231,
+      "val_f1_before": 0.8985,
+      "val_f1_after": 0.9001
     },
     {
       "iteration": 2,
-      "examples_added": 20,
-      "val_f1_before": 0.8671,
-      "val_f1_after": 0.8723
+      "examples_added": 18,
+      "val_f1_before": 0.9001,
+      "val_f1_after": 0.9006
     },
     {
       "iteration": 3,
-      "examples_added": 7,
-      "val_f1_before": 0.8723,
-      "val_f1_after": 0.871
+      "examples_added": 12,
+      "val_f1_before": 0.9006,
+      "val_f1_after": 0.901
     }
   ],
-  "total_examples_added": 256,
-  "final_val_f1": 0.871
+  "total_examples_added": 261,
+  "final_val_f1": 0.901
 }

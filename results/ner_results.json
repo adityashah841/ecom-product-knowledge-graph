@@ -1,12 +1,12 @@
 {
-  "overall_f1": 0.8683,
-  "overall_precision": 0.8575,
-  "overall_recall": 0.8794,
+  "overall_f1": 0.8987,
+  "overall_precision": 0.8868,
+  "overall_recall": 0.9108,
   "per_entity": {
     "BRAND": {
-      "precision": 0.8633,
-      "recall": 0.9011,
-      "f1": 0.8818
+      "precision": 0.857,
+      "recall": 0.9019,
+      "f1": 0.8789
     },
     "PRODUCT": {
       "precision": 0.0,
@@ -14,9 +14,9 @@
       "f1": 0.0
     },
     "CATEGORY": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0
+      "precision": 0.9713,
+      "recall": 0.9939,
+      "f1": 0.9825
     },
     "ATTRIBUTE": {
       "precision": 0.0,
@@ -24,9 +24,9 @@
       "f1": 0.0
     },
     "COLOR": {
-      "precision": 0.8479,
-      "recall": 0.8455,
-      "f1": 0.8467
+      "precision": 0.8596,
+      "recall": 0.8518,
+      "f1": 0.8557
     },
     "MATERIAL": {
       "precision": 0.0,

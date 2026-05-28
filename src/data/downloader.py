@@ -7,7 +7,9 @@ amazon-science/esci-data repository — no HuggingFace loaders required.
 Columns used:
   product_id, product_title, product_brand, product_color, product_locale
 
-Silver labels are generated via rule-based brand/color matching.
+Silver labels are generated via rule-based brand/color/category matching.
+CATEGORY uses a curated vocabulary of common Amazon product type terms
+matched as whole words in the title (same pattern as COLOR).
 Expected silver accuracy: ~85-92% (intentional noise on real-world titles).
 """
 
@@ -47,6 +49,56 @@ COLORS = [
 _COLOR_PATTERNS = {
     c: re.compile(r"\b" + re.escape(c) + r"\b", re.IGNORECASE)
     for c in sorted(COLORS, key=len, reverse=True)
+}
+
+# ── Category vocabulary ───────────────────────────────────────────────────────
+CATEGORIES = [
+    # Apparel
+    "shirt", "t-shirt", "tshirt", "polo", "blouse", "top", "tank top",
+    "hoodie", "sweatshirt", "sweater", "cardigan", "jacket", "coat", "vest",
+    "pants", "jeans", "shorts", "leggings", "skirt", "dress", "suit",
+    "socks", "underwear", "bra", "pajamas", "swimsuit", "swimwear",
+    # Footwear
+    "shoes", "sneakers", "boots", "sandals", "slippers", "loafers", "heels",
+    "running shoes", "hiking boots", "flip flops",
+    # Electronics
+    "laptop", "tablet", "monitor", "keyboard", "mouse", "headphones",
+    "earbuds", "speaker", "microphone", "webcam", "router", "charger",
+    "cable", "adapter", "battery", "hard drive", "ssd", "flash drive",
+    "printer", "scanner", "projector", "camera", "tripod",
+    "phone case", "screen protector",
+    # Home & Kitchen
+    "blender", "toaster", "coffee maker", "kettle", "air fryer",
+    "slow cooker", "rice cooker", "pan", "pot", "skillet", "baking sheet",
+    "knife", "cutting board", "mixing bowl", "colander",
+    "vacuum cleaner", "air purifier", "humidifier", "fan", "heater",
+    "lamp", "light bulb", "curtains", "rug", "pillow", "blanket",
+    "mattress", "sheets", "towel", "shower curtain",
+    # Tools & Hardware
+    "drill", "screwdriver", "hammer", "wrench", "pliers", "tape measure",
+    "level", "saw", "power tool", "extension cord",
+    # Beauty & Health
+    "shampoo", "conditioner", "moisturizer", "sunscreen", "lipstick",
+    "mascara", "foundation", "perfume", "deodorant", "toothbrush",
+    "razor", "trimmer", "hair dryer", "straightener", "curling iron",
+    # Sports & Outdoors
+    "yoga mat", "dumbbell", "resistance band", "foam roller",
+    "tent", "sleeping bag", "backpack", "water bottle", "helmet",
+    "gloves", "knee pad", "ankle brace",
+    # Office & Stationery
+    "notebook", "pen", "pencil", "marker", "stapler", "folder", "binder",
+    "desk organizer", "calendar", "planner",
+    # Baby & Kids
+    "diaper", "baby monitor", "stroller", "car seat", "crib",
+    "baby bottle", "pacifier", "toy", "puzzle",
+    # Pet Supplies
+    "dog food", "cat food", "dog bed", "cat bed", "leash", "collar",
+    "pet carrier", "litter box",
+]
+
+_CATEGORY_PATTERNS = {
+    c: re.compile(r"\b" + re.escape(c) + r"\b", re.IGNORECASE)
+    for c in sorted(CATEGORIES, key=len, reverse=True)
 }
 
 
@@ -160,6 +212,10 @@ def generate_silver_labels(row: pd.Series) -> dict | None:
     Color rules:
       - Whole-word regex to avoid partial matches (e.g. "red" in "hundred")
       - Uses product_color field first, then vocabulary scan
+    Category rules:
+      - Whole-word regex scan against curated CATEGORIES vocabulary
+      - Longest match wins (vocabulary sorted by length descending)
+      - Only tagged if span is not already occupied by BRAND or COLOR
     """
     title = str(row.get("title", "") or "").strip()
     if len(title) < 5:
@@ -198,6 +254,13 @@ def generate_silver_labels(row: pd.Series) -> dict | None:
             for start, end in _find_span(tokens, color):
                 if labels[start] == "O":
                     tag_span(start, end, "COLOR")
+
+    # Category from vocabulary (whole-word regex, longest match first)
+    for category, pattern in _CATEGORY_PATTERNS.items():
+        if pattern.search(title_lower):
+            for start, end in _find_span(tokens, category):
+                if labels[start] == "O":
+                    tag_span(start, end, "CATEGORY")
 
     return {"tokens": tokens, "labels": labels}
 
